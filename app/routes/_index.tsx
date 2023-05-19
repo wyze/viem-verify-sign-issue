@@ -1,13 +1,24 @@
 import { useState } from "react";
 import {
-  Address,
+  type Address,
   createPublicClient,
   createWalletClient,
   custom,
   http,
+  verifyMessage,
 } from "viem";
 import { goerli } from "viem/chains";
 import "viem/window";
+
+type ValidState =
+  | { state: "unverified" }
+  | {
+      state: "verified";
+      data: {
+        publicClient: boolean;
+        utility: boolean;
+      };
+    };
 
 const publicClient = createPublicClient({
   chain: goerli,
@@ -21,7 +32,8 @@ const walletClient = createWalletClient({
 
 export default function Index() {
   const [account, setAccount] = useState<Address>();
-  const [valid, setValid] = useState<boolean>();
+  const [valid, setValid] = useState<ValidState>({ state: "unverified" });
+  const [error, setError] = useState<Error>();
 
   if (account) {
     return (
@@ -35,18 +47,40 @@ export default function Index() {
               message,
             });
 
-            setValid(
-              await publicClient.verifyMessage({
-                address: account,
-                message,
-                signature,
-              })
-            );
+            try {
+              setValid({
+                state: "verified",
+                data: {
+                  publicClient: await publicClient.verifyMessage({
+                    address: account,
+                    message,
+                    signature,
+                  }),
+                  utility: await verifyMessage({
+                    address: account,
+                    message,
+                    signature,
+                  }),
+                },
+              });
+            } catch (error) {
+              if (error instanceof Error) {
+                setError(error);
+              }
+            }
           }}
         >
           Sign Message
         </button>
-        {valid !== undefined ? <div>Valid: {valid ? "Yes" : "No"}</div> : null}
+        {valid.state === "verified" ? (
+          <>
+            <div>
+              Public Client Valid: {valid.data.publicClient ? "Yes" : "No"}
+            </div>
+            <div>Utility Valid: {valid.data.utility ? "Yes" : "No"}</div>
+          </>
+        ) : null}
+        {typeof error !== "undefined" ? <pre>{error.stack}</pre> : null}
       </>
     );
   }
